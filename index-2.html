@@ -1,0 +1,1332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Building Decentralized Identity · Web3 Deep Dive</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:ital,wght@0,300;0,400;1,300&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+/* ─── RESET & BASE ─── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #0a0a0b;
+  --surface: #111113;
+  --surface2: #18181c;
+  --border: rgba(255,255,255,.07);
+  --text: #f0ede8;
+  --muted: #7a7875;
+  --accent: #c4722a;
+  --accent2: #e8a45a;
+  --amber-glow: rgba(196,114,42,.15);
+  --green: #2ec97e;
+  --blue: #4fa3e0;
+  --font-display: 'Syne', sans-serif;
+  --font-body: 'Instrument Serif', serif;
+  --font-mono: 'DM Mono', monospace;
+}
+html { scroll-behavior: smooth; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 18px;
+  line-height: 1.7;
+  overflow-x: hidden;
+  cursor: none;
+}
+
+/* ─── CUSTOM CURSOR ─── */
+.cursor {
+  position: fixed; width: 12px; height: 12px;
+  background: var(--accent); border-radius: 50%;
+  pointer-events: none; z-index: 9999;
+  transform: translate(-50%,-50%);
+  transition: transform .1s, width .3s, height .3s, opacity .3s;
+  mix-blend-mode: screen;
+}
+.cursor-ring {
+  position: fixed; width: 40px; height: 40px;
+  border: 1px solid rgba(196,114,42,.5); border-radius: 50%;
+  pointer-events: none; z-index: 9998;
+  transform: translate(-50%,-50%);
+  transition: transform .15s ease-out, width .3s, height .3s;
+}
+.cursor.hover { width: 20px; height: 20px; }
+.cursor-ring.hover { width: 60px; height: 60px; border-color: var(--accent); }
+
+/* ─── NOISE OVERLAY ─── */
+body::before {
+  content: '';
+  position: fixed; inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='.04'/%3E%3C/svg%3E");
+  pointer-events: none; z-index: 1000; opacity: .4;
+}
+
+/* ─── NAV ─── */
+nav {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 900;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 20px 48px;
+  background: rgba(10,10,11,.7);
+  backdrop-filter: blur(20px);
+  border-bottom: 1px solid var(--border);
+  transition: padding .4s;
+}
+nav.scrolled { padding: 14px 48px; }
+.nav-logo {
+  font-family: var(--font-display);
+  font-weight: 800; font-size: 1rem;
+  letter-spacing: -.02em; color: var(--text);
+  display: flex; align-items: center; gap: 10px;
+}
+.nav-logo-mark {
+  width: 32px; height: 32px;
+  background: var(--accent); border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: .7rem; color: #fff;
+}
+.nav-links {
+  display: flex; gap: 36px; list-style: none;
+  font-family: var(--font-display); font-size: .78rem;
+  font-weight: 600; letter-spacing: .06em; text-transform: uppercase;
+}
+.nav-links a { color: var(--muted); text-decoration: none; transition: color .2s; }
+.nav-links a:hover { color: var(--text); }
+.nav-cta {
+  font-family: var(--font-display); font-size: .78rem; font-weight: 700;
+  letter-spacing: .06em; text-transform: uppercase;
+  color: var(--accent); text-decoration: none;
+  border: 1px solid var(--accent);
+  padding: 8px 20px; border-radius: 100px;
+  transition: background .2s, color .2s;
+}
+.nav-cta:hover { background: var(--accent); color: #fff; }
+
+/* ─── THREE.JS CANVAS ─── */
+#hero-canvas {
+  position: absolute; inset: 0; z-index: 0;
+  width: 100%; height: 100%;
+}
+
+/* ─── HERO ─── */
+.hero {
+  position: relative; min-height: 100vh;
+  display: flex; flex-direction: column;
+  align-items: flex-start; justify-content: flex-end;
+  padding: 0 48px 80px;
+  overflow: hidden;
+}
+.hero-bg-text {
+  position: absolute; bottom: -40px; left: -10px;
+  font-family: var(--font-display); font-weight: 800;
+  font-size: clamp(100px, 16vw, 220px);
+  color: transparent;
+  -webkit-text-stroke: 1px rgba(255,255,255,.04);
+  letter-spacing: -.04em; user-select: none;
+  z-index: 1; line-height: 1;
+}
+.hero-tag {
+  font-family: var(--font-display); font-size: .72rem;
+  font-weight: 600; letter-spacing: .14em; text-transform: uppercase;
+  color: var(--accent); border: 1px solid rgba(196,114,42,.3);
+  padding: 6px 14px; border-radius: 100px;
+  margin-bottom: 32px; z-index: 2;
+  animation: fadeUp .8s .2s both;
+}
+.hero-title {
+  font-family: var(--font-display); font-weight: 800;
+  font-size: clamp(40px, 6vw, 86px);
+  line-height: 1.0; letter-spacing: -.04em;
+  max-width: 820px; z-index: 2;
+  animation: fadeUp .9s .35s both;
+}
+.hero-title em { font-style: italic; color: var(--accent2); font-family: var(--font-body); }
+.hero-sub {
+  margin-top: 24px; font-size: 1.05rem; color: var(--muted);
+  max-width: 520px; z-index: 2;
+  animation: fadeUp .9s .5s both; font-family: var(--font-display); font-weight: 400;
+}
+.hero-meta {
+  display: flex; gap: 32px; margin-top: 40px; z-index: 2;
+  animation: fadeUp .9s .65s both;
+}
+.hero-meta-item { display: flex; flex-direction: column; gap: 4px; }
+.hero-meta-label { font-family: var(--font-mono); font-size: .65rem; color: var(--muted); letter-spacing: .1em; text-transform: uppercase; }
+.hero-meta-value { font-family: var(--font-display); font-size: .9rem; font-weight: 600; }
+.hero-scroll {
+  position: absolute; bottom: 36px; right: 48px;
+  font-family: var(--font-mono); font-size: .65rem;
+  color: var(--muted); letter-spacing: .1em; text-transform: uppercase;
+  display: flex; align-items: center; gap: 10px; z-index: 2;
+  animation: fadeUp 1s .8s both;
+}
+.hero-scroll::before {
+  content: ''; display: block;
+  width: 1px; height: 40px; background: var(--muted);
+  animation: scrollLine 2s ease-in-out infinite;
+}
+@keyframes scrollLine {
+  0%,100% { transform: scaleY(1); opacity: 1; }
+  50% { transform: scaleY(.3); opacity: .3; }
+}
+
+/* ─── PILL SLIDER (like Zenrixa "We Create Future") ─── */
+.pill-track {
+  display: flex; gap: 0; padding: 48px 0;
+  overflow: hidden; position: relative;
+}
+.pill-track::before, .pill-track::after {
+  content: ''; position: absolute; top: 0; bottom: 0; width: 100px; z-index: 2;
+  pointer-events: none;
+}
+.pill-track::before { left: 0; background: linear-gradient(to right, var(--bg), transparent); }
+.pill-track::after { right: 0; background: linear-gradient(to left, var(--bg), transparent); }
+.pill-inner {
+  display: flex; gap: 16px; animation: marquee 20s linear infinite;
+  white-space: nowrap;
+}
+.pill {
+  flex-shrink: 0;
+  height: 80px; border-radius: 100px;
+  display: flex; align-items: center; justify-content: center;
+  padding: 0 40px;
+  font-family: var(--font-display); font-weight: 700; font-size: 1.4rem;
+}
+.pill-light { background: #f0ede8; color: #0a0a0b; }
+.pill-amber { background: var(--accent); color: #fff; }
+.pill-dark { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+.pill-outline { background: transparent; border: 1px solid var(--border); color: var(--muted); }
+.pill-arrow { background: #1a1a1e; color: var(--text); width: 80px; padding: 0; }
+@keyframes marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+
+/* ─── SECTION WRAPPER ─── */
+.section { padding: 100px 48px; }
+.section-label {
+  font-family: var(--font-mono); font-size: .65rem;
+  color: var(--accent); letter-spacing: .14em; text-transform: uppercase;
+  display: flex; align-items: center; gap: 8px; margin-bottom: 48px;
+}
+.section-label::before { content: '•'; }
+.section-h2 {
+  font-family: var(--font-display); font-weight: 800;
+  font-size: clamp(32px, 4.5vw, 64px);
+  letter-spacing: -.03em; line-height: 1.05;
+}
+.section-h2 em { font-style: italic; font-family: var(--font-body); color: var(--accent2); }
+
+/* ─── INTRO SECTION ─── */
+.intro-grid {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 80px; align-items: center;
+  max-width: 1200px; margin: 0 auto;
+}
+.intro-visual {
+  perspective: 800px;
+}
+.intro-card-3d {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 24px; padding: 40px;
+  transform: rotateY(-12deg) rotateX(6deg);
+  transform-style: preserve-3d;
+  transition: transform .6s ease;
+  box-shadow: 40px 40px 80px rgba(0,0,0,.6), -2px -2px 0 rgba(255,255,255,.03) inset;
+}
+.intro-card-3d:hover { transform: rotateY(-4deg) rotateX(2deg); }
+.card-glow {
+  position: absolute; inset: 0; border-radius: 24px; pointer-events: none;
+  background: radial-gradient(circle at 30% 40%, rgba(196,114,42,.12), transparent 60%);
+}
+.stat-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 32px;
+}
+.stat-item { padding: 20px; background: var(--surface2); border-radius: 16px; border: 1px solid var(--border); position: relative; overflow: hidden; }
+.stat-item::before {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+  background: linear-gradient(90deg, var(--accent), transparent);
+}
+.stat-num { font-family: var(--font-display); font-weight: 800; font-size: 2rem; color: var(--accent2); }
+.stat-desc { font-family: var(--font-mono); font-size: .65rem; color: var(--muted); margin-top: 4px; text-transform: uppercase; letter-spacing: .06em; }
+
+/* ─── CONCEPT CARDS ─── */
+.cards-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 20px; max-width: 1200px; margin: 0 auto;
+}
+.concept-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 20px; padding: 36px;
+  position: relative; overflow: hidden;
+  transition: transform .4s ease, box-shadow .4s;
+  transform-style: preserve-3d;
+}
+.concept-card:hover {
+  transform: translateY(-8px) rotateX(4deg);
+  box-shadow: 0 30px 60px rgba(0,0,0,.5), 0 0 0 1px rgba(196,114,42,.2);
+}
+.concept-card .card-icon {
+  width: 52px; height: 52px; border-radius: 14px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.4rem; margin-bottom: 24px;
+}
+.card-icon-amber { background: rgba(196,114,42,.15); border: 1px solid rgba(196,114,42,.3); }
+.card-icon-green { background: rgba(46,201,126,.1); border: 1px solid rgba(46,201,126,.2); }
+.card-icon-blue { background: rgba(79,163,224,.1); border: 1px solid rgba(79,163,224,.2); }
+.concept-card h3 {
+  font-family: var(--font-display); font-size: 1.2rem; font-weight: 700;
+  margin-bottom: 12px; letter-spacing: -.01em;
+}
+.concept-card p { font-size: .95rem; color: var(--muted); line-height: 1.65; }
+.card-corner-mark {
+  position: absolute; top: 20px; right: 20px;
+  font-family: var(--font-mono); font-size: .6rem;
+  color: var(--border); letter-spacing: .08em;
+}
+
+/* ─── TECH STACK SECTION ─── */
+.tech-section { background: var(--surface); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+.tech-grid {
+  display: grid; grid-template-columns: 1fr 1.4fr;
+  gap: 80px; align-items: start;
+  max-width: 1200px; margin: 0 auto;
+}
+.tech-list { display: flex; flex-direction: column; gap: 16px; }
+.tech-item {
+  display: flex; align-items: center; gap: 16px;
+  padding: 18px 24px;
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 14px; cursor: default;
+  transition: border-color .3s, transform .3s;
+  position: relative; overflow: hidden;
+}
+.tech-item:hover { border-color: rgba(196,114,42,.4); transform: translateX(6px); }
+.tech-item::before {
+  content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+  background: var(--accent); transform: scaleY(0); transform-origin: bottom;
+  transition: transform .3s;
+}
+.tech-item:hover::before { transform: scaleY(1); }
+.tech-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); flex-shrink: 0; }
+.tech-name { font-family: var(--font-display); font-weight: 700; font-size: .95rem; }
+.tech-desc { font-family: var(--font-mono); font-size: .65rem; color: var(--muted); margin-left: auto; letter-spacing: .04em; }
+
+/* ─── COMPARISON TABLE ─── */
+.compare-wrap {
+  max-width: 1200px; margin: 0 auto;
+  border: 1px solid var(--border); border-radius: 24px; overflow: hidden;
+}
+.compare-header {
+  display: grid; grid-template-columns: 1fr 1fr 1fr;
+  background: var(--surface2);
+  border-bottom: 1px solid var(--border);
+}
+.compare-col-head {
+  padding: 24px 28px;
+  font-family: var(--font-display); font-size: .85rem; font-weight: 700; letter-spacing: .04em;
+  border-right: 1px solid var(--border);
+}
+.compare-col-head:last-child { border-right: none; }
+.col-accent { color: var(--accent); }
+.compare-row {
+  display: grid; grid-template-columns: 1fr 1fr 1fr;
+  border-bottom: 1px solid var(--border);
+  transition: background .2s;
+}
+.compare-row:last-child { border-bottom: none; }
+.compare-row:hover { background: rgba(196,114,42,.04); }
+.compare-cell {
+  padding: 18px 28px;
+  font-size: .9rem; border-right: 1px solid var(--border);
+  display: flex; align-items: center; gap: 10px;
+}
+.compare-cell:first-child { color: var(--muted); font-family: var(--font-mono); font-size: .78rem; letter-spacing: .04em; }
+.compare-cell:last-child { border-right: none; color: var(--green); }
+.compare-cell.web2 { color: #e05a4f; }
+.compare-cell.web3-val { color: var(--green); }
+.check::before { content: '✓'; color: var(--green); font-weight: 700; }
+.cross::before { content: '✗'; color: #e05a4f; font-weight: 700; }
+
+/* ─── ARCHITECTURE DIAGRAM ─── */
+.arch-section { max-width: 1200px; margin: 0 auto; }
+.arch-diagram {
+  position: relative; margin-top: 60px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 24px; padding: 60px; overflow: hidden;
+}
+.arch-diagram::before {
+  content: ''; position: absolute; inset: 0;
+  background: radial-gradient(ellipse at 50% 0%, rgba(196,114,42,.06), transparent 60%);
+}
+.arch-row { display: flex; justify-content: center; gap: 24px; margin-bottom: 0; position: relative; z-index: 1; }
+.arch-node {
+  padding: 16px 28px;
+  border-radius: 14px; text-align: center;
+  font-family: var(--font-display); font-size: .85rem; font-weight: 700;
+  border: 1px solid; position: relative;
+  transform-style: preserve-3d; transition: transform .3s;
+}
+.arch-node:hover { transform: translateY(-4px); }
+.arch-node-user { background: rgba(79,163,224,.1); border-color: rgba(79,163,224,.3); color: var(--blue); }
+.arch-node-did { background: rgba(196,114,42,.12); border-color: rgba(196,114,42,.4); color: var(--accent2); }
+.arch-node-vc { background: rgba(46,201,126,.1); border-color: rgba(46,201,126,.3); color: var(--green); }
+.arch-node-chain { background: rgba(255,255,255,.04); border-color: var(--border); color: var(--text); }
+.arch-connector {
+  display: flex; justify-content: center; align-items: center;
+  padding: 12px 0; position: relative;
+}
+.arch-line {
+  width: 1px; height: 40px; background: linear-gradient(to bottom, var(--accent), transparent);
+  position: relative;
+}
+.arch-line::after {
+  content: '▼'; position: absolute; bottom: -4px; left: 50%; transform: translateX(-50%);
+  color: var(--accent); font-size: .6rem;
+}
+.arch-label {
+  font-family: var(--font-mono); font-size: .6rem;
+  color: var(--accent); letter-spacing: .08em; margin-left: 8px;
+}
+
+/* ─── CODE BLOCK ─── */
+.code-section { max-width: 1200px; margin: 0 auto; }
+.code-block {
+  background: #0d0d10; border: 1px solid var(--border);
+  border-radius: 20px; overflow: hidden; margin-top: 40px;
+}
+.code-header {
+  display: flex; align-items: center; gap: 10px;
+  padding: 16px 24px; border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+.code-dot { width: 12px; height: 12px; border-radius: 50%; }
+.code-dot-r { background: #ff5f57; }
+.code-dot-y { background: #ffbd2e; }
+.code-dot-g { background: #28ca41; }
+.code-filename {
+  font-family: var(--font-mono); font-size: .75rem;
+  color: var(--muted); margin-left: 8px; letter-spacing: .04em;
+}
+.code-body { padding: 32px; overflow-x: auto; }
+pre { font-family: var(--font-mono); font-size: .82rem; line-height: 1.8; }
+.kw { color: #c792ea; }
+.fn { color: #82aaff; }
+.str { color: #c3e88d; }
+.cm { color: #546e7a; font-style: italic; }
+.num { color: #f78c6c; }
+.prop { color: var(--accent2); }
+
+/* ─── USE CASES ─── */
+.usecases-grid {
+  display: grid; grid-template-columns: repeat(2,1fr); gap: 20px;
+  max-width: 1200px; margin: 0 auto;
+}
+.usecase-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 20px; padding: 40px;
+  position: relative; overflow: hidden;
+  transition: transform .4s, box-shadow .4s;
+}
+.usecase-card:hover { transform: translateY(-6px); box-shadow: 0 24px 48px rgba(0,0,0,.5); }
+.usecase-card::after {
+  content: ''; position: absolute; inset: 0;
+  background: radial-gradient(circle at 0% 100%, rgba(196,114,42,.06), transparent 50%);
+  pointer-events: none;
+}
+.usecase-num {
+  font-family: var(--font-display); font-size: 3.5rem; font-weight: 800;
+  color: rgba(255,255,255,.04); line-height: 1;
+  margin-bottom: -16px; letter-spacing: -.04em;
+}
+.usecase-card h3 {
+  font-family: var(--font-display); font-size: 1.25rem; font-weight: 700;
+  margin-bottom: 12px; letter-spacing: -.02em;
+}
+.usecase-card p { color: var(--muted); font-size: .95rem; line-height: 1.65; }
+.usecase-tag {
+  display: inline-block; margin-top: 20px;
+  font-family: var(--font-mono); font-size: .65rem;
+  padding: 4px 12px; border-radius: 100px;
+  border: 1px solid rgba(196,114,42,.3); color: var(--accent2);
+  letter-spacing: .06em; text-transform: uppercase;
+}
+
+/* ─── PROJECTS ROW ─── */
+.projects-row {
+  display: flex; gap: 16px; overflow-x: auto; padding: 40px 0;
+  scrollbar-width: none; max-width: 1200px; margin: 0 auto;
+}
+.projects-row::-webkit-scrollbar { display: none; }
+.project-pill {
+  flex-shrink: 0; padding: 20px 32px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 100px; display: flex; align-items: center; gap: 14px;
+  font-family: var(--font-display); font-size: .95rem; font-weight: 600;
+  transition: border-color .3s, background .3s;
+  white-space: nowrap;
+}
+.project-pill:hover { border-color: var(--accent); background: rgba(196,114,42,.06); }
+.project-pill-dot { width: 8px; height: 8px; border-radius: 50%; }
+.dot-amber { background: var(--accent); }
+.dot-green { background: var(--green); }
+.dot-blue { background: var(--blue); }
+
+/* ─── CHALLENGES ACCORDION ─── */
+.challenges-wrap { max-width: 1200px; margin: 0 auto; }
+.accordion-item {
+  border-bottom: 1px solid var(--border); overflow: hidden;
+}
+.accordion-trigger {
+  width: 100%; display: flex; align-items: center; justify-content: space-between;
+  padding: 28px 0; background: none; border: none; cursor: pointer; color: var(--text);
+  font-family: var(--font-display); font-size: 1.1rem; font-weight: 700;
+  text-align: left; letter-spacing: -.01em; transition: color .2s;
+}
+.accordion-trigger:hover { color: var(--accent2); }
+.accordion-arrow {
+  width: 32px; height: 32px; border-radius: 50%;
+  border: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: center;
+  font-size: .8rem; transition: transform .3s, background .3s;
+  flex-shrink: 0;
+}
+.accordion-item.open .accordion-arrow { transform: rotate(45deg); background: var(--accent); border-color: var(--accent); }
+.accordion-body {
+  max-height: 0; overflow: hidden; transition: max-height .5s ease, padding .3s;
+}
+.accordion-item.open .accordion-body { max-height: 400px; }
+.accordion-content { padding-bottom: 28px; color: var(--muted); font-size: .98rem; line-height: 1.75; }
+
+/* ─── CONCLUSION ─── */
+.conclusion-section {
+  text-align: center; background: var(--surface);
+  border-top: 1px solid var(--border);
+}
+.conclusion-quote {
+  font-family: var(--font-body); font-style: italic;
+  font-size: clamp(1.4rem, 2.5vw, 2rem);
+  max-width: 700px; margin: 0 auto 40px;
+  color: var(--text); line-height: 1.5;
+}
+.conclusion-quote span { color: var(--accent2); }
+.author-row { display: flex; align-items: center; gap: 16px; justify-content: center; margin-bottom: 60px; }
+.author-avatar {
+  width: 48px; height: 48px; border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent), #6b3a1a);
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-display); font-weight: 800; font-size: .9rem;
+}
+.author-info { text-align: left; }
+.author-name { font-family: var(--font-display); font-weight: 700; font-size: .95rem; }
+.author-role { font-family: var(--font-mono); font-size: .65rem; color: var(--muted); letter-spacing: .06em; margin-top: 2px; }
+.cta-btn {
+  display: inline-flex; align-items: center; gap: 12px;
+  background: var(--accent); color: #fff;
+  font-family: var(--font-display); font-weight: 700; font-size: .85rem;
+  letter-spacing: .04em; text-transform: uppercase;
+  padding: 16px 36px; border-radius: 100px;
+  text-decoration: none; transition: transform .2s, box-shadow .2s;
+  box-shadow: 0 0 0 rgba(196,114,42,0);
+}
+.cta-btn:hover { transform: translateY(-2px); box-shadow: 0 12px 32px rgba(196,114,42,.35); }
+.cta-row { display: flex; gap: 16px; justify-content: center; align-items: center; margin-top: 20px; }
+.cta-ghost {
+  display: inline-flex; align-items: center; gap: 10px;
+  border: 1px solid var(--border); color: var(--text);
+  font-family: var(--font-display); font-weight: 600; font-size: .85rem;
+  padding: 15px 32px; border-radius: 100px;
+  text-decoration: none; transition: border-color .2s, transform .2s;
+}
+.cta-ghost:hover { border-color: var(--text); transform: translateY(-2px); }
+
+/* ─── FOOTER ─── */
+footer {
+  border-top: 1px solid var(--border); padding: 48px;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.footer-brand { font-family: var(--font-display); font-weight: 800; font-size: 1rem; letter-spacing: -.02em; }
+.footer-copy { font-family: var(--font-mono); font-size: .65rem; color: var(--muted); letter-spacing: .06em; }
+.footer-links { display: flex; gap: 24px; }
+.footer-links a { font-family: var(--font-mono); font-size: .65rem; color: var(--muted); text-decoration: none; letter-spacing: .06em; text-transform: uppercase; transition: color .2s; }
+.footer-links a:hover { color: var(--text); }
+
+/* ─── PROGRESS BAR ─── */
+.progress-bar {
+  position: fixed; top: 0; left: 0; height: 2px;
+  background: linear-gradient(90deg, var(--accent), var(--accent2));
+  z-index: 9999; width: 0%; transition: width .1s;
+}
+
+/* ─── ANIMATIONS ─── */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(24px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.reveal {
+  opacity: 0; transform: translateY(32px);
+  transition: opacity .8s ease, transform .8s ease;
+}
+.reveal.visible { opacity: 1; transform: translateY(0); }
+.reveal-delay-1 { transition-delay: .15s; }
+.reveal-delay-2 { transition-delay: .3s; }
+.reveal-delay-3 { transition-delay: .45s; }
+
+/* ─── RESPONSIVE ─── */
+@media (max-width: 900px) {
+  nav { padding: 16px 24px; }
+  .nav-links, .nav-cta { display: none; }
+  .hero { padding: 0 24px 64px; }
+  .section { padding: 64px 24px; }
+  .intro-grid { grid-template-columns: 1fr; }
+  .cards-grid { grid-template-columns: 1fr; }
+  .tech-grid { grid-template-columns: 1fr; }
+  .usecases-grid { grid-template-columns: 1fr; }
+  footer { flex-direction: column; gap: 24px; text-align: center; }
+}
+
+/* ─── DIVIDER ─── */
+.divider {
+  height: 1px; background: linear-gradient(90deg, transparent, var(--border), transparent);
+  margin: 0 48px;
+}
+</style>
+</head>
+<body>
+
+<!-- CURSOR -->
+<div class="cursor" id="cursor"></div>
+<div class="cursor-ring" id="cursorRing"></div>
+
+<!-- PROGRESS BAR -->
+<div class="progress-bar" id="progressBar"></div>
+
+<!-- NAV -->
+<nav id="navbar">
+  <div class="nav-logo">
+    <div class="nav-logo-mark">⬡</div>
+    Web3 Lab
+  </div>
+  <ul class="nav-links">
+    <li><a href="#intro">Intro</a></li>
+    <li><a href="#concepts">Concepts</a></li>
+    <li><a href="#tech">Technology</a></li>
+    <li><a href="#tutorial">Tutorial</a></li>
+    <li><a href="#usecases">Use Cases</a></li>
+  </ul>
+  <a href="#conclusion" class="nav-cta">Read More →</a>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <canvas id="hero-canvas"></canvas>
+  <div class="hero-bg-text">DID</div>
+  <span class="hero-tag">● Web3 Deep Dive · 2024</span>
+  <h1 class="hero-title">
+    Building <em>Decentralized</em><br>Identity in Web3
+  </h1>
+  <p class="hero-sub">
+    Verifiable Credentials, Zero-Knowledge Proofs, and Self-Sovereign Identity — the future of privacy-first authentication.
+  </p>
+  <div class="hero-meta">
+    <div class="hero-meta-item">
+      <span class="hero-meta-label">Reading Time</span>
+      <span class="hero-meta-value">12 min</span>
+    </div>
+    <div class="hero-meta-item">
+      <span class="hero-meta-label">Difficulty</span>
+      <span class="hero-meta-value">Advanced</span>
+    </div>
+    <div class="hero-meta-item">
+      <span class="hero-meta-label">Updated</span>
+      <span class="hero-meta-value">Jun 2024</span>
+    </div>
+  </div>
+  <div class="hero-scroll">Scroll Down</div>
+</section>
+
+<!-- PILL TRACK -->
+<div class="pill-track" aria-hidden="true">
+  <div class="pill-inner" id="pillInner">
+    <div class="pill pill-light">Self-Sovereign</div>
+    <div class="pill pill-amber">Privacy First</div>
+    <div class="pill pill-dark">DID · W3C Standard</div>
+    <div class="pill pill-outline">Zero-Knowledge Proofs</div>
+    <div class="pill pill-arrow">→</div>
+    <div class="pill pill-dark">Verifiable Credentials</div>
+    <div class="pill pill-amber">Decentralized</div>
+    <div class="pill pill-light">Open Identity</div>
+    <div class="pill pill-outline">Blockchain-Native</div>
+    <div class="pill pill-arrow">→</div>
+    <!-- duplicate for infinite -->
+    <div class="pill pill-light">Self-Sovereign</div>
+    <div class="pill pill-amber">Privacy First</div>
+    <div class="pill pill-dark">DID · W3C Standard</div>
+    <div class="pill pill-outline">Zero-Knowledge Proofs</div>
+    <div class="pill pill-arrow">→</div>
+    <div class="pill pill-dark">Verifiable Credentials</div>
+    <div class="pill pill-amber">Decentralized</div>
+    <div class="pill pill-light">Open Identity</div>
+    <div class="pill pill-outline">Blockchain-Native</div>
+    <div class="pill pill-arrow">→</div>
+  </div>
+</div>
+
+<!-- INTRO -->
+<section class="section" id="intro">
+  <div class="intro-grid">
+    <div>
+      <div class="section-label reveal">Introduction</div>
+      <h2 class="section-h2 reveal reveal-delay-1">
+        The Web2 Identity<br><em>Crisis</em>
+      </h2>
+      <p class="reveal reveal-delay-2" style="color:var(--muted); margin-top:24px; font-size:1.05rem; line-height:1.8;">
+        Every day, billions of users hand over their identities to centralized gatekeepers — Google, Facebook, Apple. These platforms monetize your data, suffer catastrophic breaches, and lock you into walled gardens you never agreed to.
+      </p>
+      <p class="reveal reveal-delay-3" style="color:var(--muted); margin-top:16px; font-size:1.05rem; line-height:1.8;">
+        In 2023 alone, over <strong style="color:var(--text)">8.2 billion records</strong> were exposed in data breaches. The root problem isn't a lack of security — it's a fundamental architectural failure. We shouldn't have to trust any single entity with our identity.
+      </p>
+      <p style="color:var(--muted); margin-top:16px; font-size:1.05rem; line-height:1.8;" class="reveal">
+        Decentralized Identity (DID) with Verifiable Credentials offers a paradigm shift: cryptographic, portable, user-controlled identity that doesn't require trusting a corporation to exist.
+      </p>
+    </div>
+    <div class="intro-visual reveal">
+      <div class="intro-card-3d" style="position:relative;">
+        <div class="card-glow"></div>
+        <div style="font-family:var(--font-mono); font-size:.65rem; color:var(--accent); letter-spacing:.1em; text-transform:uppercase; margin-bottom:20px;">// Identity Status</div>
+        <div style="font-family:var(--font-display); font-size:1.4rem; font-weight:800; margin-bottom:8px;">Web2 vs Web3</div>
+        <div style="font-size:.9rem; color:var(--muted); margin-bottom:32px;">The identity ownership gap</div>
+        <div class="stat-grid">
+          <div class="stat-item">
+            <div class="stat-num">8.2B</div>
+            <div class="stat-desc">Records leaked 2023</div>
+          </div>
+          <div class="stat-item" style="--accent:#2ec97e;">
+            <div class="stat-num" style="color:var(--green);">0</div>
+            <div class="stat-desc">Central points of failure in DID</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-num">$4.5T</div>
+            <div class="stat-desc">Identity fraud losses projected</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-num" style="color:var(--blue);">W3C</div>
+            <div class="stat-desc">DID v1.0 official standard</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- CONCEPTS -->
+<section class="section" id="concepts">
+  <div style="max-width:1200px; margin:0 auto;">
+    <div class="section-label reveal">Core Concepts</div>
+    <h2 class="section-h2 reveal reveal-delay-1">What is Decentralized<br><em>Identity?</em></h2>
+    <p class="reveal reveal-delay-2" style="color:var(--muted); margin-top:16px; max-width:600px; font-size:1rem;">
+      Think of it like a physical passport — but one that you control, that can't be forged, and that doesn't require any government (or corporation) to validate.
+    </p>
+  </div>
+  <div class="cards-grid" style="margin-top:60px;">
+    <div class="concept-card reveal">
+      <div class="card-corner-mark">01</div>
+      <div class="card-icon card-icon-amber">🔑</div>
+      <h3>Decentralized Identifier (DID)</h3>
+      <p>A globally unique, cryptographically verifiable identifier that requires no central registry. It's a URI that resolves to a DID Document containing public keys and service endpoints. Format: <code style="color:var(--accent2); font-family:var(--font-mono); font-size:.8rem;">did:ethr:0x123...abc</code></p>
+    </div>
+    <div class="concept-card reveal reveal-delay-1">
+      <div class="card-corner-mark">02</div>
+      <div class="card-icon card-icon-green">📜</div>
+      <h3>Verifiable Credentials (VC)</h3>
+      <p>Cryptographically signed digital documents — like diplomas, licenses, or KYC approvals — issued by trusted parties. They can be verified without contacting the issuer, preserving privacy through selective disclosure.</p>
+    </div>
+    <div class="concept-card reveal reveal-delay-2">
+      <div class="card-corner-mark">03</div>
+      <div class="card-icon card-icon-blue">🔮</div>
+      <h3>Zero-Knowledge Proofs</h3>
+      <p>Mathematical protocols that allow you to prove a statement is true without revealing the underlying data. Example: prove you're over 18 without revealing your birth date. Powered by zk-SNARKs and zk-STARKs.</p>
+    </div>
+    <div class="concept-card reveal">
+      <div class="card-corner-mark">04</div>
+      <div class="card-icon card-icon-amber">🏛️</div>
+      <h3>Self-Sovereign Identity (SSI)</h3>
+      <p>The philosophy that individuals should own and control their identity data without relying on any central authority — enabled by DIDs and VCs working together in a trust triangle.</p>
+    </div>
+    <div class="concept-card reveal reveal-delay-1">
+      <div class="card-corner-mark">05</div>
+      <div class="card-icon card-icon-green">⛓️</div>
+      <h3>DID Registry & Blockchain</h3>
+      <p>DIDs are anchored to blockchains (Ethereum, Polygon, Solana, ION on Bitcoin) providing tamper-proof resolution. The blockchain serves as a decentralized public key infrastructure (DPKI).</p>
+    </div>
+    <div class="concept-card reveal reveal-delay-2">
+      <div class="card-corner-mark">06</div>
+      <div class="card-icon card-icon-blue">🔐</div>
+      <h3>Trust Triangle Model</h3>
+      <p>The DID ecosystem involves three parties: the <strong style="color:var(--text)">Issuer</strong> (e.g., university), the <strong style="color:var(--text)">Holder</strong> (graduate/user), and the <strong style="color:var(--text)">Verifier</strong> (employer/service). No intermediary needed.</p>
+    </div>
+  </div>
+</section>
+
+<!-- TECH SECTION -->
+<section class="section tech-section" id="tech">
+  <div class="tech-grid">
+    <div>
+      <div class="section-label reveal">Core Technologies</div>
+      <h2 class="section-h2 reveal reveal-delay-1">The Stack<br><em>Behind DID</em></h2>
+      <p class="reveal reveal-delay-2" style="color:var(--muted); margin-top:24px; font-size:.98rem; line-height:1.75;">
+        Building a production-grade decentralized identity system requires careful selection of cryptographic primitives, storage solutions, and blockchain infrastructure.
+      </p>
+    </div>
+    <div class="tech-list">
+      <div class="tech-item reveal">
+        <div class="tech-dot"></div>
+        <div>
+          <div class="tech-name">DIDKit / Veramo</div>
+          <div style="font-family:var(--font-mono);font-size:.65rem;color:var(--muted);margin-top:4px;">DID resolution & VC issuance SDK</div>
+        </div>
+        <div class="tech-desc">SDK Layer</div>
+      </div>
+      <div class="tech-item reveal reveal-delay-1">
+        <div class="tech-dot" style="background:var(--green)"></div>
+        <div>
+          <div class="tech-name">Polygon ID</div>
+          <div style="font-family:var(--font-mono);font-size:.65rem;color:var(--muted);margin-top:4px;">zk-SNARK based identity protocol</div>
+        </div>
+        <div class="tech-desc">ZK Identity</div>
+      </div>
+      <div class="tech-item reveal reveal-delay-2">
+        <div class="tech-dot" style="background:var(--blue)"></div>
+        <div>
+          <div class="tech-name">Ceramic Network</div>
+          <div style="font-family:var(--font-mono);font-size:.65rem;color:var(--muted);margin-top:4px;">Decentralized data streams for profiles</div>
+        </div>
+        <div class="tech-desc">Data Layer</div>
+      </div>
+      <div class="tech-item reveal">
+        <div class="tech-dot" style="background:#a78bfa"></div>
+        <div>
+          <div class="tech-name">IPFS / Filecoin</div>
+          <div style="font-family:var(--font-mono);font-size:.65rem;color:var(--muted);margin-top:4px;">DID document storage & resolution</div>
+        </div>
+        <div class="tech-desc">Storage</div>
+      </div>
+      <div class="tech-item reveal reveal-delay-1">
+        <div class="tech-dot" style="background:#f59e0b"></div>
+        <div>
+          <div class="tech-name">WalletConnect v2</div>
+          <div style="font-family:var(--font-mono);font-size:.65rem;color:var(--muted);margin-top:4px;">Secure wallet communication protocol</div>
+        </div>
+        <div class="tech-desc">Auth Layer</div>
+      </div>
+      <div class="tech-item reveal reveal-delay-2">
+        <div class="tech-dot" style="background:#ec4899"></div>
+        <div>
+          <div class="tech-name">JSON-LD / JWT / SD-JWT</div>
+          <div style="font-family:var(--font-mono);font-size:.65rem;color:var(--muted);margin-top:4px;">VC serialization formats</div>
+        </div>
+        <div class="tech-desc">Format</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- COMPARISON TABLE -->
+<section class="section" id="comparison">
+  <div style="max-width:1200px; margin:0 auto;">
+    <div class="section-label reveal">Side by Side</div>
+    <h2 class="section-h2 reveal reveal-delay-1">Web2 vs Web3<br><em>Identity Systems</em></h2>
+  </div>
+  <div class="compare-wrap reveal" style="margin-top:48px;">
+    <div class="compare-header">
+      <div class="compare-col-head">Feature</div>
+      <div class="compare-col-head" style="color:#e05a4f;">⊗ Web2 Identity</div>
+      <div class="compare-col-head col-accent">⊕ Web3 / DID</div>
+    </div>
+    <div class="compare-row">
+      <div class="compare-cell">Data Ownership</div>
+      <div class="compare-cell web2"><span class="cross"></span> Platform-owned</div>
+      <div class="compare-cell web3-val"><span class="check"></span> User-owned</div>
+    </div>
+    <div class="compare-row">
+      <div class="compare-cell">Single Point of Failure</div>
+      <div class="compare-cell web2"><span class="cross"></span> Yes — server breach</div>
+      <div class="compare-cell web3-val"><span class="check"></span> None — distributed</div>
+    </div>
+    <div class="compare-row">
+      <div class="compare-cell">Privacy Model</div>
+      <div class="compare-cell web2"><span class="cross"></span> Surveillance capitalism</div>
+      <div class="compare-cell web3-val"><span class="check"></span> Selective disclosure + ZK</div>
+    </div>
+    <div class="compare-row">
+      <div class="compare-cell">Portability</div>
+      <div class="compare-cell web2"><span class="cross"></span> Siloed per platform</div>
+      <div class="compare-cell web3-val"><span class="check"></span> Cross-chain portable</div>
+    </div>
+    <div class="compare-row">
+      <div class="compare-cell">Verification Method</div>
+      <div class="compare-cell web2"><span class="cross"></span> Trust the server</div>
+      <div class="compare-cell web3-val"><span class="check"></span> Cryptographic proof</div>
+    </div>
+    <div class="compare-row">
+      <div class="compare-cell">Revocation</div>
+      <div class="compare-cell web2"><span class="cross"></span> Platform decides</div>
+      <div class="compare-cell web3-val"><span class="check"></span> User-initiated + on-chain</div>
+    </div>
+    <div class="compare-row">
+      <div class="compare-cell">Interoperability</div>
+      <div class="compare-cell web2"><span class="cross"></span> OAuth silos</div>
+      <div class="compare-cell web3-val"><span class="check"></span> W3C DID / VC standards</div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ARCHITECTURE -->
+<section class="section" id="architecture">
+  <div class="arch-section">
+    <div class="section-label reveal">System Design</div>
+    <h2 class="section-h2 reveal reveal-delay-1">DID Architecture<br><em>Flow</em></h2>
+    <div class="arch-diagram reveal">
+      <div class="arch-row">
+        <div class="arch-node arch-node-user">👤 User / Holder<br><small style="font-family:var(--font-mono);font-size:.6rem;font-weight:400;color:var(--muted);">Owns DID + Wallet</small></div>
+      </div>
+      <div class="arch-connector">
+        <div class="arch-line"></div>
+        <span class="arch-label">issues VC</span>
+        <div class="arch-line"></div>
+      </div>
+      <div class="arch-row">
+        <div class="arch-node arch-node-did">🏛️ Issuer<br><small style="font-family:var(--font-mono);font-size:.6rem;font-weight:400;color:var(--muted);">University / KYC provider</small></div>
+        <div style="width:80px;display:flex;align-items:center;justify-content:center;color:var(--border);font-family:var(--font-mono);font-size:.7rem;">↔</div>
+        <div class="arch-node arch-node-vc">✅ Verifier<br><small style="font-family:var(--font-mono);font-size:.6rem;font-weight:400;color:var(--muted);">Employer / dApp</small></div>
+      </div>
+      <div class="arch-connector"><div class="arch-line"></div></div>
+      <div class="arch-row">
+        <div class="arch-node arch-node-chain">⛓️ Blockchain Registry<br><small style="font-family:var(--font-mono);font-size:.6rem;font-weight:400;color:var(--muted);">Ethereum / Polygon / ION</small></div>
+      </div>
+    </div>
+    <p style="font-family:var(--font-mono); font-size:.72rem; color:var(--muted); text-align:center; margin-top:24px; letter-spacing:.04em;">
+      The Issuer signs VCs with their DID private key → Holder stores in wallet → Verifier checks signature against on-chain DID Document
+    </p>
+  </div>
+</section>
+
+<!-- TUTORIAL / CODE -->
+<section class="section" style="background:var(--surface); border-top:1px solid var(--border);" id="tutorial">
+  <div class="code-section">
+    <div class="section-label reveal">Hands-On Tutorial</div>
+    <h2 class="section-h2 reveal reveal-delay-1">Building a VC<br><em>Issuer</em> in Node.js</h2>
+    <p class="reveal reveal-delay-2" style="color:var(--muted); margin-top:16px; font-size:.98rem; max-width:600px;">
+      Let's build a minimal credential issuer using the Veramo framework — one of the most battle-tested DID toolkits available.
+    </p>
+
+    <div class="code-block reveal" style="margin-top:40px;">
+      <div class="code-header">
+        <div class="code-dot code-dot-r"></div>
+        <div class="code-dot code-dot-y"></div>
+        <div class="code-dot code-dot-g"></div>
+        <span class="code-filename">setup-agent.ts</span>
+      </div>
+      <div class="code-body">
+<pre><span class="cm">// 1. Install: npm install @veramo/core @veramo/did-manager @veramo/key-manager</span>
+
+<span class="kw">import</span> { <span class="prop">createAgent</span> } <span class="kw">from</span> <span class="str">'@veramo/core'</span>
+<span class="kw">import</span> { <span class="prop">DIDManager</span> } <span class="kw">from</span> <span class="str">'@veramo/did-manager'</span>
+<span class="kw">import</span> { <span class="prop">EthrDIDProvider</span> } <span class="kw">from</span> <span class="str">'@veramo/did-provider-ethr'</span>
+<span class="kw">import</span> { <span class="prop">KeyManager</span>, <span class="prop">MemoryKeyStore</span> } <span class="kw">from</span> <span class="str">'@veramo/key-manager'</span>
+<span class="kw">import</span> { <span class="prop">CredentialPlugin</span> } <span class="kw">from</span> <span class="str">'@veramo/credential-w3c'</span>
+
+<span class="cm">// 2. Create the Veramo agent with DID + VC capabilities</span>
+<span class="kw">export const</span> <span class="prop">agent</span> = <span class="fn">createAgent</span>({
+  plugins: [
+    <span class="kw">new</span> <span class="fn">KeyManager</span>({
+      store: <span class="kw">new</span> <span class="fn">MemoryKeyStore</span>(),
+    }),
+    <span class="kw">new</span> <span class="fn">DIDManager</span>({
+      providers: {
+        <span class="str">'did:ethr:goerli'</span>: <span class="kw">new</span> <span class="fn">EthrDIDProvider</span>({
+          defaultKms: <span class="str">'local'</span>,
+          network: <span class="str">'goerli'</span>,
+          rpcUrl: <span class="str">`https://eth-goerli.g.alchemy.com/v2/${</span><span class="prop">process</span>.<span class="prop">env</span>.<span class="prop">ALCHEMY_KEY</span><span class="str">}`</span>,
+        }),
+      },
+      defaultProvider: <span class="str">'did:ethr:goerli'</span>,
+    }),
+    <span class="kw">new</span> <span class="fn">CredentialPlugin</span>(),
+  ],
+})</pre>
+      </div>
+    </div>
+
+    <div class="code-block reveal" style="margin-top:24px;">
+      <div class="code-header">
+        <div class="code-dot code-dot-r"></div>
+        <div class="code-dot code-dot-y"></div>
+        <div class="code-dot code-dot-g"></div>
+        <span class="code-filename">issue-credential.ts</span>
+      </div>
+      <div class="code-body">
+<pre><span class="cm">// 3. Issue a Verifiable Credential</span>
+<span class="kw">async function</span> <span class="fn">issueCredential</span>() {
+  <span class="cm">// Create issuer DID</span>
+  <span class="kw">const</span> issuerDID = <span class="kw">await</span> agent.<span class="fn">didManagerCreate</span>({
+    alias: <span class="str">'myUniversity'</span>,
+  })
+
+  <span class="cm">// Issue a Verifiable Credential to a student</span>
+  <span class="kw">const</span> vc = <span class="kw">await</span> agent.<span class="fn">createVerifiableCredential</span>({
+    credential: {
+      issuer: { id: issuerDID.did },
+      <span class="str">'@context'</span>: [
+        <span class="str">'https://www.w3.org/2018/credentials/v1'</span>,
+        <span class="str">'https://schema.org'</span>
+      ],
+      type: [<span class="str">'VerifiableCredential'</span>, <span class="str">'UniversityDegree'</span>],
+      credentialSubject: {
+        id: <span class="str">'did:ethr:goerli:0xStudent...'</span>,
+        degree: {
+          type: <span class="str">'BachelorDegree'</span>,
+          name: <span class="str">'Computer Science'</span>,
+          year: <span class="num">2024</span>,
+        },
+      },
+    },
+    proofFormat: <span class="str">'jwt'</span>,   <span class="cm">// or 'EthereumEip712Signature2021'</span>
+  })
+
+  console.<span class="fn">log</span>(<span class="str">'✅ VC Issued:'</span>, vc)
+  <span class="kw">return</span> vc
+}</pre>
+      </div>
+    </div>
+
+    <div class="code-block reveal" style="margin-top:24px;">
+      <div class="code-header">
+        <div class="code-dot code-dot-r"></div>
+        <div class="code-dot code-dot-y"></div>
+        <div class="code-dot code-dot-g"></div>
+        <span class="code-filename">verify-credential.ts</span>
+      </div>
+      <div class="code-body">
+<pre><span class="cm">// 4. Verify a presented credential (Verifier side)</span>
+<span class="kw">async function</span> <span class="fn">verifyCredential</span>(<span class="prop">vcJwt</span>: <span class="kw">string</span>) {
+  <span class="kw">const</span> result = <span class="kw">await</span> agent.<span class="fn">verifyCredential</span>({
+    credential: vcJwt,
+    policies: {
+      credentialStatus: <span class="kw">true</span>,   <span class="cm">// Check revocation status</span>
+      expirationDate: <span class="kw">true</span>,     <span class="cm">// Verify expiry</span>
+    },
+  })
+
+  <span class="kw">if</span> (result.verified) {
+    console.<span class="fn">log</span>(<span class="str">'🔒 Credential is valid!'</span>)
+    console.<span class="fn">log</span>(<span class="str">'Issuer:'</span>, result.verifiableCredential.issuer)
+    console.<span class="fn">log</span>(<span class="str">'Subject:'</span>, result.verifiableCredential.credentialSubject)
+  } <span class="kw">else</span> {
+    console.<span class="fn">log</span>(<span class="str">'❌ Invalid credential:'</span>, result.error)
+  }
+}</pre>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- USE CASES -->
+<section class="section" id="usecases">
+  <div style="max-width:1200px; margin:0 auto 60px;">
+    <div class="section-label reveal">Real World</div>
+    <h2 class="section-h2 reveal reveal-delay-1">Use Cases &<br><em>Applications</em></h2>
+  </div>
+  <div class="usecases-grid">
+    <div class="usecase-card reveal">
+      <div class="usecase-num">01</div>
+      <h3>Passwordless Login</h3>
+      <p>Sign into any dApp or traditional app using your wallet's DID — no username, no password, no phone number. Sign In With Ethereum (SIWE) already proves this model works at scale, with Lens Protocol, Farcaster, and others adopting it widely.</p>
+      <span class="usecase-tag">Authentication</span>
+    </div>
+    <div class="usecase-card reveal reveal-delay-1">
+      <div class="usecase-num">02</div>
+      <h3>KYC Without Exposure</h3>
+      <p>DeFi protocols need compliance without compromising privacy. With VCs and ZK proofs, a user can prove "I am not a US person" or "I am above 18" to a smart contract — without revealing passport details to the protocol or any third party.</p>
+      <span class="usecase-tag">DeFi / Compliance</span>
+    </div>
+    <div class="usecase-card reveal">
+      <div class="usecase-num">03</div>
+      <h3>Academic Credentials</h3>
+      <p>Universities issue tamper-proof digital diplomas as VCs. Graduates hold them in their identity wallet and share with employers via QR code or blockchain query — eliminating fake certificates and the need to contact registrars.</p>
+      <span class="usecase-tag">Education</span>
+    </div>
+    <div class="usecase-card reveal reveal-delay-1">
+      <div class="usecase-num">04</div>
+      <h3>DAO Reputation & Governance</h3>
+      <p>DAOs like Gitcoin use Passport to aggregate reputation signals (GitHub activity, NFT ownership, Lens profile) into a Sybil-resistant identity score. This enables fairer voting and grants distribution across decentralized organizations.</p>
+      <span class="usecase-tag">DAOs / Governance</span>
+    </div>
+  </div>
+</section>
+
+<!-- PROJECTS -->
+<section class="section" style="padding-top:0;">
+  <div style="max-width:1200px; margin:0 auto;">
+    <div class="section-label reveal">Live Projects</div>
+    <h2 class="section-h2 reveal reveal-delay-1">Ecosystem<br><em>Players</em></h2>
+  </div>
+  <div class="projects-row reveal">
+    <div class="project-pill"><div class="project-pill-dot dot-amber"></div>Polygon ID</div>
+    <div class="project-pill"><div class="project-pill-dot dot-green"></div>Gitcoin Passport</div>
+    <div class="project-pill"><div class="project-pill-dot dot-blue"></div>Spruce / SpruceID</div>
+    <div class="project-pill"><div class="project-pill-dot dot-amber"></div>Ceramic Network</div>
+    <div class="project-pill"><div class="project-pill-dot dot-green"></div>Disco.xyz</div>
+    <div class="project-pill"><div class="project-pill-dot dot-blue"></div>ENS (Ethereum Name Service)</div>
+    <div class="project-pill"><div class="project-pill-dot dot-amber"></div>Worldcoin / World ID</div>
+    <div class="project-pill"><div class="project-pill-dot dot-green"></div>Veramo Framework</div>
+    <div class="project-pill"><div class="project-pill-dot dot-blue"></div>Microsoft Entra Verified ID</div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- CHALLENGES -->
+<section class="section" id="challenges">
+  <div class="challenges-wrap">
+    <div class="section-label reveal">Honest Assessment</div>
+    <h2 class="section-h2 reveal reveal-delay-1" style="margin-bottom:48px;">Challenges &<br><em>Future Outlook</em></h2>
+
+    <div class="accordion-item reveal">
+      <button class="accordion-trigger" onclick="toggleAccordion(this)">
+        UX Complexity — The Key Management Problem
+        <div class="accordion-arrow">+</div>
+      </button>
+      <div class="accordion-body">
+        <div class="accordion-content">
+          The biggest barrier to mass adoption is key management. Users lose seed phrases. They don't understand the difference between a DID and a wallet address. Account recovery mechanisms need to reach the simplicity of "forgot password" while maintaining cryptographic guarantees. Projects like Account Abstraction (ERC-4337) and social recovery wallets (Argent) are making progress here.
+        </div>
+      </div>
+    </div>
+    <div class="accordion-item reveal">
+      <button class="accordion-trigger" onclick="toggleAccordion(this)">
+        Interoperability — The Fragmented Ecosystem
+        <div class="accordion-arrow">+</div>
+      </button>
+      <div class="accordion-body">
+        <div class="accordion-content">
+          There are over 150 DID methods registered with W3C. A credential issued on Polygon may not be natively verifiable on Solana. While W3C standards provide a foundation, the real-world fragmentation between different blockchain implementations, wallet providers, and VC formats (JWT vs JSON-LD vs SD-JWT) creates interoperability headaches that enterprises are reluctant to navigate.
+        </div>
+      </div>
+    </div>
+    <div class="accordion-item reveal">
+      <button class="accordion-trigger" onclick="toggleAccordion(this)">
+        Regulatory Uncertainty — eIDAS 2.0 & Beyond
+        <div class="accordion-arrow">+</div>
+      </button>
+      <div class="accordion-body">
+        <div class="accordion-content">
+          The EU's eIDAS 2.0 regulation is creating a European Digital Identity Wallet — a government-mandated DID-like system. This could either legitimize decentralized identity or impose centralization through compliance requirements. In the US, there's no equivalent framework yet. Legal recognition of VCs as valid identity proofs varies wildly by jurisdiction.
+        </div>
+      </div>
+    </div>
+    <div class="accordion-item reveal">
+      <button class="accordion-trigger" onclick="toggleAccordion(this)">
+        Privacy Paradox — On-Chain Data is Forever
+        <div class="accordion-arrow">+</div>
+      </button>
+      <div class="accordion-body">
+        <div class="accordion-content">
+          The very permanence that makes blockchain trustworthy creates a privacy challenge: GDPR's "right to be forgotten" is architecturally incompatible with immutable ledgers. Solutions like ZK proofs (so nothing personal goes on-chain) and off-chain VC storage (IPFS with key encryption) partially resolve this — but perfect privacy-permanence balance remains an active research area.
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- CONCLUSION -->
+<section class="section conclusion-section" id="conclusion">
+  <blockquote class="conclusion-quote reveal">
+    "Identity is the foundation of trust. When we <span>own our identity</span>, we own our digital sovereignty — and that changes everything."
+  </blockquote>
+  <div class="author-row reveal">
+    <div class="author-avatar">A</div>
+    <div class="author-info">
+      <div class="author-name">Web3 Lab Editorial</div>
+      <div class="author-role">DID Research · Blockchain Development</div>
+    </div>
+  </div>
+  <p class="reveal" style="color:var(--muted); max-width:580px; margin:0 auto 40px; font-size:1rem; line-height:1.8;">
+    Decentralized Identity isn't a niche cryptography experiment anymore — it's being adopted by the EU, Fortune 500 companies, and leading blockchain protocols. The question isn't whether DID will matter, but how quickly UX and regulatory frameworks will catch up to make it universal.
+  </p>
+  <div class="cta-row reveal">
+    <a href="https://www.w3.org/TR/did-core/" target="_blank" class="cta-btn">Read W3C DID Spec →</a>
+    <a href="https://veramo.io/docs" target="_blank" class="cta-ghost">Veramo Docs ↗</a>
+  </div>
+  <p style="font-family:var(--font-mono); font-size:.65rem; color:var(--muted); margin-top:40px; letter-spacing:.06em;">
+    POLYGON ID · CERAMIC NETWORK · GITCOIN PASSPORT · SPRUCE · DISCO.XYZ
+  </p>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="footer-brand">Web3 Lab ⬡</div>
+  <div class="footer-copy">© 2024 — Decentralized Identity Deep Dive</div>
+  <div class="footer-links">
+    <a href="#">GitHub</a>
+    <a href="#">Twitter</a>
+    <a href="#">RSS</a>
+  </div>
+</footer>
+
+<script>
+// ─── CURSOR ───
+const cursor = document.getElementById('cursor');
+const cursorRing = document.getElementById('cursorRing');
+let mx = 0, my = 0;
+document.addEventListener('mousemove', e => {
+  mx = e.clientX; my = e.clientY;
+  cursor.style.left = mx + 'px'; cursor.style.top = my + 'px';
+  cursorRing.style.left = mx + 'px'; cursorRing.style.top = my + 'px';
+});
+document.querySelectorAll('a, button, .concept-card, .tech-item, .project-pill').forEach(el => {
+  el.addEventListener('mouseenter', () => { cursor.classList.add('hover'); cursorRing.classList.add('hover'); });
+  el.addEventListener('mouseleave', () => { cursor.classList.remove('hover'); cursorRing.classList.remove('hover'); });
+});
+
+// ─── PROGRESS BAR ───
+const progressBar = document.getElementById('progressBar');
+window.addEventListener('scroll', () => {
+  const scrollPct = window.scrollY / (document.body.scrollHeight - window.innerHeight) * 100;
+  progressBar.style.width = scrollPct + '%';
+});
+
+// ─── NAV SCROLL ───
+const navbar = document.getElementById('navbar');
+window.addEventListener('scroll', () => {
+  navbar.classList.toggle('scrolled', window.scrollY > 60);
+});
+
+// ─── REVEAL ON SCROLL ───
+const reveals = document.querySelectorAll('.reveal');
+const observer = new IntersectionObserver(entries => {
+  entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('visible'); } });
+}, { threshold: 0.1 });
+reveals.forEach(el => observer.observe(el));
+
+// ─── ACCORDION ───
+function toggleAccordion(btn) {
+  const item = btn.closest('.accordion-item');
+  const wasOpen = item.classList.contains('open');
+  document.querySelectorAll('.accordion-item').forEach(i => i.classList.remove('open'));
+  if (!wasOpen) item.classList.add('open');
+}
+
+// ─── THREE.JS HERO ───
+(function initThree() {
+  const canvas = document.getElementById('hero-canvas');
+  const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(60, canvas.offsetWidth / canvas.offsetHeight, 0.1, 100);
+  camera.position.z = 5;
+
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setSize(canvas.offsetWidth, canvas.offsetHeight);
+
+  // Particle field
+  const count = 1800;
+  const positions = new Float32Array(count * 3);
+  const colors = new Float32Array(count * 3);
+  for (let i = 0; i < count; i++) {
+    positions[i * 3] = (Math.random() - 0.5) * 18;
+    positions[i * 3 + 1] = (Math.random() - 0.5) * 12;
+    positions[i * 3 + 2] = (Math.random() - 0.5) * 8;
+    const t = Math.random();
+    colors[i * 3] = t > 0.6 ? 0.77 : 0.3;
+    colors[i * 3 + 1] = t > 0.6 ? 0.44 : 0.5;
+    colors[i * 3 + 2] = t > 0.6 ? 0.16 : 0.8;
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  const mat = new THREE.PointsMaterial({ size: 0.03, vertexColors: true, transparent: true, opacity: 0.7 });
+  const particles = new THREE.Points(geo, mat);
+  scene.add(particles);
+
+  // Floating geometric shapes
+  const shapes = [];
+  const geos = [
+    new THREE.IcosahedronGeometry(0.4, 0),
+    new THREE.OctahedronGeometry(0.35, 0),
+    new THREE.TetrahedronGeometry(0.3, 0),
+  ];
+  for (let i = 0; i < 6; i++) {
+    const g = geos[i % geos.length];
+    const m = new THREE.MeshBasicMaterial({
+      color: i % 2 === 0 ? 0xc4722a : 0x4fa3e0,
+      wireframe: true, transparent: true, opacity: 0.18
+    });
+    const mesh = new THREE.Mesh(g, m);
+    mesh.position.set((Math.random() - 0.5) * 10, (Math.random() - 0.5) * 6, (Math.random() - 0.5) * 3);
+    mesh.userData = { sx: Math.random() * 0.008 + 0.003, sy: Math.random() * 0.006 + 0.002 };
+    scene.add(mesh); shapes.push(mesh);
+  }
+
+  // Connection lines
+  const lineMat = new THREE.LineBasicMaterial({ color: 0xc4722a, transparent: true, opacity: 0.06 });
+  for (let i = 0; i < 12; i++) {
+    const pts = [
+      new THREE.Vector3((Math.random() - 0.5) * 16, (Math.random() - 0.5) * 10, (Math.random() - 0.5) * 4),
+      new THREE.Vector3((Math.random() - 0.5) * 16, (Math.random() - 0.5) * 10, (Math.random() - 0.5) * 4),
+    ];
+    const lineGeo = new THREE.BufferGeometry().setFromPoints(pts);
+    scene.add(new THREE.Line(lineGeo, lineMat));
+  }
+
+  let mouseX = 0, mouseY = 0;
+  document.addEventListener('mousemove', e => {
+    mouseX = (e.clientX / window.innerWidth - 0.5) * 2;
+    mouseY = (e.clientY / window.innerHeight - 0.5) * 2;
+  });
+
+  let t = 0;
+  function animate() {
+    requestAnimationFrame(animate);
+    t += 0.006;
+    particles.rotation.y = t * 0.05 + mouseX * 0.08;
+    particles.rotation.x = mouseY * 0.04;
+    shapes.forEach(s => {
+      s.rotation.x += s.userData.sx;
+      s.rotation.y += s.userData.sy;
+      s.position.y += Math.sin(t + s.position.x) * 0.002;
+    });
+    camera.position.x += (mouseX * 0.3 - camera.position.x) * 0.03;
+    camera.position.y += (-mouseY * 0.2 - camera.position.y) * 0.03;
+    renderer.render(scene, camera);
+  }
+  animate();
+
+  window.addEventListener('resize', () => {
+    camera.aspect = canvas.offsetWidth / canvas.offsetHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(canvas.offsetWidth, canvas.offsetHeight);
+  });
+})();
+
+// ─── CARD 3D TILT ───
+document.querySelectorAll('.concept-card, .usecase-card').forEach(card => {
+  card.addEventListener('mousemove', e => {
+    const rect = card.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width - 0.5;
+    const y = (e.clientY - rect.top) / rect.height - 0.5;
+    card.style.transform = `translateY(-8px) rotateY(${x * 12}deg) rotateX(${-y * 8}deg)`;
+  });
+  card.addEventListener('mouseleave', () => {
+    card.style.transform = '';
+  });
+});
+</script>
+</body>
+</html>
